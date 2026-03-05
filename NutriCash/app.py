@@ -1,163 +1,206 @@
-import flet as ft
+import streamlit as st
 from models import UserProfile
 from calculator import calculate_user_macros
+from ai_coach import analyze_meal_slip
+from gps_logic import recalculate_route
+from scraper import generate_smart_cart
 
-def main(page: ft.Page):
-    # --- CONFIGURAÇÕES DA JANELA (Novo Padrão Flet 0.80+) ---
-    page.title = "NutriCash - Onboarding"
-    page.window.width = 400      # Na versão antiga era page.window_width
-    page.window.height = 800     # Na versão antiga era page.window_height
-    page.window.resizable = False # Na versão antiga era page.window_resizable
-    page.theme_mode = "light"
-    page.padding = 0
-    
-    # Paleta de Cores
-    VERDE_ESCURO = "#2D6A4F"
-    VERDE_CLARO = "#95D5B2"
-    BRANCO = "#F8F9FA"
+# 1. Configuração da página
+st.set_page_config(page_title="NutriCash", page_icon="🍏", layout="centered")
 
-    # --- CAMPOS DO FORMULÁRIO ---
-    nome_input = ft.TextField(label="Nome", border_radius=15, prefix_icon="person")
-    idade_input = ft.TextField(label="Idade", border_radius=15, keyboard_type="number")
-    peso_input = ft.TextField(label="Peso (kg)", border_radius=15, keyboard_type="number")
-    altura_input = ft.TextField(label="Altura (cm)", border_radius=15, keyboard_type="number")
-    
-    genero_dropdown = ft.Dropdown(
-        label="Género",
-        border_radius=15,
-        options=[
-            ft.dropdown.Option(key="Masculino", text="Masculino"), 
-            ft.dropdown.Option(key="Feminino", text="Feminino")
-        ]
-    )
-    
-    objetivo_dropdown = ft.Dropdown(
-        label="Objetivo",
-        border_radius=15,
-        options=[
-            ft.dropdown.Option(key="perder_peso", text="Perder Peso"),
-            ft.dropdown.Option(key="manter", text="Manter"),
-            ft.dropdown.Option(key="ganhar_massa", text="Ganhar Massa")
-        ]
-    )
-    
-    atividade_dropdown = ft.Dropdown(
-        label="Nível de Atividade",
-        border_radius=15,
-        options=[
-            ft.dropdown.Option(key="sedentario", text="Sedentário"),
-            ft.dropdown.Option(key="moderado", text="Moderado"),
-            ft.dropdown.Option(key="ativo", text="Ativo")
-        ]
-    )
-    
-    orcamento_input = ft.TextField(
-        label="Orçamento Semanal (€)", 
-        border_radius=15, 
-        keyboard_type="number"
-    )
+# 2. Gestão de Estado (Memória da App)
+if 'user_data' not in st.session_state:
+    st.session_state.user_data = None
+if 'messages' not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Olá! Sou o teu Coach NutriCash. Comeste algo fora do plano? Confessa aqui, eu não julgo!"}
+    ]
 
-    # --- FUNÇÃO DE TRANSIÇÃO (CÁLCULO) ---
-    def gerar_plano_click(e):
-        try:
-            # 1. Criar objeto temporário para cálculo
-            user = UserProfile(
-                name=nome_input.value,
-                age=int(idade_input.value),
-                weight=float(peso_input.value),
-                height=float(altura_input.value),
-                gender=genero_dropdown.value,
-                goal=objetivo_dropdown.value,
-                activity_level=atividade_dropdown.value,
-                weekly_budget=float(orcamento_input.value),
-                preferred_supermarket="Lidl",
-                target_protein=0, target_carbs=0, target_fats=0, target_calories=0
-            )
+def show_onboarding():
+    st.title("🍏 Bem-vindo ao NutriCash")
+    st.write("Vamos configurar o teu perfil de saúde.")
 
-            # 2. Calcular Macros
-            user_calculado = calculate_user_macros(user)
+    # Formulário Streamlit
+    with st.form("onboarding_form"):
+        nome = st.text_input("Nome")
+        
+        col1, col2 = st.columns(2)
+        idade = col1.number_input("Idade", min_value=10, max_value=120, step=1, value=30)
+        genero = col2.selectbox("Género", ["Masculino", "Feminino"])
 
-            # 3. Atualizar a UI
-            form_container.visible = False
-            resumo_container.visible = True
-            
-            val_cal.value = f"{user_calculado.target_calories} kcal"
-            val_prot.value = f"{user_calculado.target_protein}g"
-            val_carb.value = f"{user_calculado.target_carbs}g"
-            val_fat.value = f"{user_calculado.target_fats}g"
-            
-            page.update()
-            
-        except Exception as ex:
-            # Novo Padrão Flet 0.80+ para abrir barras de notificação de erro
-            erro_snack = ft.SnackBar(ft.Text("Erro: Preencha todos os campos com números válidos!"))
-            page.open(erro_snack)
+        col3, col4 = st.columns(2)
+        peso = col3.number_input("Peso (kg)", min_value=30.0, max_value=250.0, step=0.1, value=80.0)
+        altura = col4.number_input("Altura (cm)", min_value=100.0, max_value=250.0, step=1.0, value=175.0)
 
-    # --- CONTENTORES DA INTERFACE ---
-    val_cal = ft.Text(size=30, weight="bold", color=VERDE_ESCURO)
-    val_prot = ft.Text(size=20, weight="bold")
-    val_carb = ft.Text(size=20, weight="bold")
-    val_fat = ft.Text(size=20, weight="bold")
+        objetivo = st.selectbox("Objetivo", ["Perder Peso", "Manter", "Ganhar Massa"])
+        atividade = st.selectbox("Nível de Atividade", ["Sedentário", "Moderado", "Ativo"])
+        orcamento = st.number_input("Orçamento Semanal (€)", min_value=10.0, max_value=500.0, step=1.0, value=50.0)
 
-    resumo_container = ft.Column(
-        visible=False,
-        horizontal_alignment="center",
-        controls=[
-            ft.Icon("check_circle", color=VERDE_ESCURO, size=60),
-            ft.Text("O teu Plano NutriCash", size=24, weight="bold", color=VERDE_ESCURO),
-            ft.Divider(height=20, color="transparent"),
-            ft.Container(
-                content=ft.Column([
-                    ft.Text("Calorias Diárias", color="black54"),
-                    val_cal,
-                ], horizontal_alignment="center"),
-                bgcolor=VERDE_CLARO, padding=20, border_radius=20, width=300
-            ),
-            ft.Row([
-                ft.Container(content=ft.Column([ft.Text("Prot"), val_prot]), bgcolor=BRANCO, padding=15, border_radius=15, expand=True, border=ft.border.all(1, VERDE_CLARO)),
-                ft.Container(content=ft.Column([ft.Text("Carb"), val_carb]), bgcolor=BRANCO, padding=15, border_radius=15, expand=True, border=ft.border.all(1, VERDE_CLARO)),
-                ft.Container(content=ft.Column([ft.Text("Fat"), val_fat]), bgcolor=BRANCO, padding=15, border_radius=15, expand=True, border=ft.border.all(1, VERDE_CLARO)),
-            ], spacing=10),
-            ft.ElevatedButton(
-                "Entrar na App", 
-                color=BRANCO, bgcolor=VERDE_ESCURO, 
-                on_click=lambda _: print("Pronto para o Dashboard"),
-                width=300, height=50
-            )
-        ]
-    )
+        # Mapeamento para o backend
+        obj_map = {"Perder Peso": "perder_peso", "Manter": "manter", "Ganhar Massa": "ganhar_massa"}
+        act_map = {"Sedentário": "sedentario", "Moderado": "moderado", "Ativo": "ativo"}
 
-    form_container = ft.Column(
-        scroll="hidden",
-        controls=[
-            ft.Text("Bem-vindo ao NutriCash", size=28, weight="bold", color=VERDE_ESCURO),
-            ft.Text("Vamos configurar o teu perfil de saúde.", color="black54"),
-            ft.Divider(height=20),
-            nome_input,
-            ft.Row([idade_input, genero_dropdown]),
-            ft.Row([peso_input, altura_input]),
-            objetivo_dropdown,
-            atividade_dropdown,
-            orcamento_input,
-            ft.ElevatedButton(
-                "Gerar Plano",
-                bgcolor=VERDE_ESCURO,
-                color=BRANCO,
-                height=50,
-                width=400,
-                on_click=gerar_plano_click
-            )
-        ]
-    )
+        submitted = st.form_submit_button("Entrar na App", use_container_width=True)
 
-    page.add(
-        ft.Container(
-            content=ft.Column([form_container, resumo_container]),
-            padding=20,
-            expand=True,
-            bgcolor=BRANCO
-        )
-    )
+        if submitted:
+            if nome.strip() == "":
+                st.error("Por favor, preenche o teu nome para avançar!")
+            else:
+                user = UserProfile(
+                    name=nome,
+                    age=int(idade),
+                    weight=float(peso),
+                    height=float(altura),
+                    gender="M" if genero == "Masculino" else "F",
+                    goal=obj_map[objetivo],
+                    activity_level=act_map[atividade],
+                    weekly_budget=float(orcamento),
+                    preferred_supermarket="Continente",
+                    target_protein=0, target_carbs=0, target_fats=0, target_calories=0
+                )
+                
+                # Executa a matemática e guarda na memória
+                st.session_state.user_data = calculate_user_macros(user)
+                st.rerun()
 
-# Executar a app (método oficial mais recente)
-ft.app(main)
+def show_dashboard():
+
+    user = st.session_state.user_data
+
+    # Header
+    st.success(f"Olá, **{user.name}**! 🟢 GPS Ativo")
+    st.subheader("O teu Painel de Instrumentos")
+
+
+    # Grelha de Macros (Agora 100% Dinâmica e Viva!)
+    col1, col2, col3, col4 = st.columns(4)
+
+    # Função segura para ir buscar o que já foi consumido (se o teu backend usar 'consumed_calories' ou 'current_calories')
+    # Se o teu backend apenas subtrair aos targets, o valor consumido ficará a 0 mas o target descerá.
+    cons_cal = getattr(user, 'consumed_calories', getattr(user, 'current_calories', 0))
+    cons_prot = getattr(user, 'consumed_protein', getattr(user, 'current_protein', 0))
+    cons_carb = getattr(user, 'consumed_carbs', getattr(user, 'current_carbs', 0))
+    cons_fat = getattr(user, 'consumed_fats', getattr(user, 'current_fats', 0))
+
+    # Prevenção de divisão por zero para as barras de progresso
+    prog_cal = min(cons_cal / user.target_calories if user.target_calories > 0 else 0.0, 1.0)
+    prog_prot = min(cons_prot / user.target_protein if user.target_protein > 0 else 0.0, 1.0)
+    prog_carb = min(cons_carb / user.target_carbs if user.target_carbs > 0 else 0.0, 1.0)
+    prog_fat = min(cons_fat / user.target_fats if user.target_fats > 0 else 0.0, 1.0)
+
+    with col1:
+        st.metric(label="🔥 Calorias", value=f"{int(cons_cal)} / {int(user.target_calories)}", delta="kcal", delta_color="off")
+        st.progress(prog_cal)
+
+    with col2:
+        st.metric(label="🥩 Proteína", value=f"{int(cons_prot)} / {int(user.target_protein)}", delta="g", delta_color="off")
+        st.progress(prog_prot)
+
+    with col3:
+        st.metric(label="🌾 Hidratos", value=f"{int(cons_carb)} / {int(user.target_carbs)}", delta="g", delta_color="off")
+        st.progress(prog_carb)
+
+    with col4:
+        st.metric(label="💧 Gordura", value=f"{int(cons_fat)} / {int(user.target_fats)}", delta="g", delta_color="off")
+        st.progress(prog_fat)
+
+
+    # --- COLAR NO FINAL DA FUNÇÃO show_dashboard() ---
+    st.divider()
+    st.subheader("💬 Coach NutriCash")
+
+    # Desenhar todo o histórico de mensagens guardado na memória
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+    # --- COLAR LOGO A SEGUIR AO BLOCO 2 ---
+    prompt = st.chat_input("Ex: Comi uma fatia de bolo de chocolate...")
+
+    if prompt:
+        # 1. Guardar e desenhar o que o utilizador escreveu
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.write(prompt)
+
+        # 2. A Magia acontece aqui dentro do Spinner
+        with st.spinner("A analisar o impacto e a recalcular a rota..."):
+            try:
+                # Chama a IA para ler a refeição
+                slip_data = analyze_meal_slip(prompt, st.session_state.user_data)
+                
+                # Recalcula o GPS Nutricional
+                nova_rota = recalculate_route(st.session_state.user_data, slip_data)
+                
+                # --- O MAPEMENTO MÁGICO (O Tradutor) ---
+                if "novos_macros_diarios" in nova_rota:
+                    novos_dados = nova_rota["novos_macros_diarios"]
+                    
+                    # Atualizamos o nosso Perfil exatamente com as gavetas que a interface usa
+                    st.session_state.user_data.target_calories = novos_dados.get("calorias", st.session_state.user_data.target_calories)
+                    st.session_state.user_data.target_protein = novos_dados.get("proteina", st.session_state.user_data.target_protein)
+                    st.session_state.user_data.target_carbs = novos_dados.get("hidratos", st.session_state.user_data.target_carbs)
+                    st.session_state.user_data.target_fats = novos_dados.get("gordura", st.session_state.user_data.target_fats)
+                # ----------------------------------------
+                
+                # Resposta Empática
+                resposta = nova_rota.get("mensagem_empatica", "Rota recalculada! Vamos focar-nos no resto do dia.")
+                st.session_state.messages.append({"role": "assistant", "content": resposta})
+                
+                # Força a página a recarregar de imediato
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Ups, falha na comunicação com o satélite: {e}")
+
+    st.divider()
+    st.header("🛒 Carrinho Inteligente NutriCash")
+    st.write("Vamos transformar os teus macros de hoje numa lista de compras focada em poupança.")
+
+    # O botão chamativo (Bloco 2) e a Lógica Mágica (Bloco 3)
+    if st.button("Gerar Lista de Compras Otimizada", type="primary"):
+        with st.spinner("A analisar preços no supermercado e a procurar promoções..."):
+            try:
+                # 1. Chama a função do teu scraper enviando o perfil do utilizador
+                cart_data = generate_smart_cart(st.session_state.user_data)
+                
+                # 2. Desenha as métricas de impacto financeiro
+                st.subheader("O teu Talão de Poupança")
+                col_preco, col_poupanca = st.columns(2)
+                
+                with col_preco:
+                    st.metric(
+                        label="Custo Total Estimado", 
+                        value=f"€{cart_data['total_cost']:.2f}"
+                    )
+                
+                with col_poupanca:
+                    st.metric(
+                        label="Poupança NutriCash", 
+                        value=f"€{cart_data['savings']:.2f}", 
+                        delta="Abaixo da média nacional!", # Dá aquele toque verde visual do Streamlit
+                        delta_color="normal" 
+                    )
+                
+                # 3. Desenha a tabela de compras de forma moderna
+                st.write("**A tua Lista de Supermercado:**")
+                st.dataframe(
+                    cart_data['cart_items'], 
+                    use_container_width=True, # Faz a tabela ocupar a largura toda
+                    hide_index=True # Remove aquela coluna de números (0, 1, 2...) para ficar mais limpo
+                )
+                
+                st.success("Lista gerada com sucesso! Podes tirar print e ir às compras. 🏃‍♂️💨")
+                
+            except Exception as e:
+                st.error(f"Erro ao ligar ao satélite dos supermercados: {e}")
+    # --- FIM DO BLOCO DO CARRINHO ---
+
+    if st.button("Voltar ao Formulário"):
+        st.session_state.user_data = None
+        st.rerun()
+
+# 3. Roteamento (Routing)
+if st.session_state.user_data is None:
+    show_onboarding()
+else:
+    show_dashboard()
