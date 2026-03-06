@@ -2,8 +2,33 @@ import pandas as pd
 import math
 import json
 import os
+import google.generativeai as genai
+
 
 ARCHIVO_DESPENSA = "despensa.json"
+ARCHIVO_USUARIOS = "usuarios_db.json"
+genai.configure(api_key="AIzaSyD6Je2Ye6V5quJWZYq9SrdhU_G3IR-uCMY")
+
+
+def verificar_usuario(usuario, contraseña):
+    if not os.path.exists(ARCHIVO_USUARIOS):
+        return False
+    with open(ARCHIVO_USUARIOS, 'r') as file:
+        db = json.load(file)
+    # Compara el usuario y la contraseña (en producción esto iría encriptado)
+    return db.get(usuario) == contraseña
+
+def registrar_usuario(usuario, contraseña):
+    db = {}
+    if os.path.exists(ARCHIVO_USUARIOS):
+        with open(ARCHIVO_USUARIOS, 'r') as file:
+            db = json.load(file)
+    if usuario in db:
+        return False # El usuario ya existe
+    db[usuario] = contraseña
+    with open(ARCHIVO_USUARIOS, 'w') as file:
+        json.dump(db, file)
+    return True
 
 def cargar_despensa():
     if os.path.exists(ARCHIVO_DESPENSA):
@@ -122,5 +147,23 @@ def generar_opciones_google_flights(macros_diarios, presupuesto_semanal):
     return opciones, "Éxito"
 
 def generar_recetas_ia(lista_compras):
+    """
+    Se conecta a Gemini para generar recetas reales y creativas.
+    """
     ingredientes = [item['Nombre_Base'] for item in lista_compras]
-    return f"Con {', '.join(ingredientes)}, te sugiero cocinar:\n- Desayuno: Bowl de avena con leche, huevos revueltos al lado y fruta.\n- Almuerzo/Cena: Pechuga de pollo a la plancha con arroz o lentejas estofadas con atún."
+    ingredientes_str = ", ".join(ingredientes)
+    
+    prompt = f"""
+    Eres el Chef IA de NutriCash. Tu objetivo es ayudar al usuario a cocinar con presupuesto limitado.
+    El usuario acaba de comprar estos ingredientes: {ingredientes_str}.
+    Asume que en casa tiene sal, pimienta, ajo y aceite. 
+    Escribe 2 recetas breves, deliciosas y muy fáciles de hacer. Usa un tono animado y emojis.
+    """
+    
+    try:
+        # Usamos el modelo rápido y eficiente
+        modelo = genai.GenerativeModel('gemini-1.5-flash')
+        respuesta = modelo.generate_content(prompt)
+        return respuesta.text
+    except Exception as e:
+        return f"Ups, el Chef IA está descansando. Error: {e}"
