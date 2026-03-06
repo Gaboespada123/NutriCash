@@ -6,7 +6,7 @@ import coach_ia
 import google.generativeai as genai
 # Configuración inicial
 st.set_page_config(page_title="NutriCash", page_icon="🛒", layout="wide")
-genai.configure(api_key="AIzaSyD6Je2Ye6V5quJWZYq9SrdhU_G3IR-uCMY")
+genai.configure(api_key="lol")
 
 # Inicializar variables de sesión globales
 if 'logged_in' not in st.session_state:

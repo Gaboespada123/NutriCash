@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 
 # Recuerda configurar tu API Key en app.py o aquí
-genai.configure(api_key="AIzaSyD6Je2Ye6V5quJWZYq9SrdhU_G3IR-uCMY")
+genai.configure(api_key="lol")
 
 def mostrar_chat_nutricionista():
     st.header("💬 Tu Coach Nutricional IA")
